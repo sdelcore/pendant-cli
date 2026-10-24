@@ -2,7 +2,7 @@
 
 import click
 
-from pendant.core.dbus_client import DBusClient, get_battery_from_dbus
+from pendant.core.client import create_client
 from datetime import datetime
 
 
@@ -10,24 +10,21 @@ from datetime import datetime
 @click.pass_context
 def status(ctx):
     """Get device status (recording, storage, battery)."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
 
     # Get battery from standard BLE Battery Service (most reliable)
-    battery = get_battery_from_dbus(address)
+    battery = client.read_battery()
     if battery is not None:
         click.echo(f"\n  Battery: {battery}%")
 
     click.echo("\nGetting device status...")
     client.send_command("get_device_status")
 
-    GLib.timeout_add_seconds(3, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(3)
     client.disconnect()
 
 
@@ -35,10 +32,8 @@ def status(ctx):
 @click.pass_context
 def info(ctx):
     """Get device information (firmware, hardware, serial)."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -46,8 +41,7 @@ def info(ctx):
     click.echo("\nGetting device info...")
     client.send_command("get_device_info")
 
-    GLib.timeout_add_seconds(3, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(3)
     client.disconnect()
 
 
@@ -59,10 +53,8 @@ def listen(ctx, timeout):
     
     Press Ctrl+C to stop listening.
     """
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -94,9 +86,7 @@ def listen(ctx, timeout):
     client.on_response = on_event
 
     try:
-        if timeout > 0:
-            GLib.timeout_add_seconds(timeout, lambda: client.stop() or False)
-        client.run_with_timeout(timeout if timeout > 0 else 3600)
+        client.run_for(timeout if timeout > 0 else 3600)
     except KeyboardInterrupt:
         click.echo("\nStopped listening.")
     finally:

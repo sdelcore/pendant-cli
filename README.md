@@ -15,7 +15,7 @@ uses Google Protocol Buffers over BLE GATT characteristics.
 
 ## Requirements
 
-- Linux with BlueZ (bluetoothctl)
+- Linux with BlueZ (bluetoothctl), or macOS (see [macOS](#macos))
 - Python 3.10+
 - Nix (recommended) or manual package installation
 
@@ -43,6 +43,42 @@ pendant download -d
 # 5. Decode a raw opus file to WAV
 pendant decode recording.opus
 ```
+
+## macOS
+
+On macOS the CLI uses a [Bleak](https://github.com/hbldh/bleak) backend instead of D-Bus/BlueZ. The
+backend is chosen automatically (override with `PENDANT_BACKEND=dbus|bleak`), `dbus-python` and
+`PyGObject` are only installed on Linux, and `PENDANT_ADDRESS` is optional: without it the first
+Pendant found is used. On macOS the address is a CoreBluetooth UUID, not a MAC address.
+
+```bash
+uv sync
+protoc -I proto --python_out=proto proto/pendant.proto   # generate proto/pendant_pb2.py
+brew install opus                                         # libopus, for `pendant decode`
+export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib       # if opuslib cannot find libopus
+
+pendant bt scan
+pendant bt pair      # first time only, Pendant in pairing mode
+pendant status
+pendant download -d -o recordings
+```
+
+Notes:
+
+- **Bluetooth permission.** The terminal app running `pendant` needs Bluetooth access; a process
+  without it aborts (SIGABRT) when CoreBluetooth starts.
+- **Pairing.** macOS has no pairing API for BLE. It pairs automatically when the Pendant rejects an
+  unencrypted write with "insufficient encryption", so the Bleak backend writes to the control
+  characteristic *with response*. The Pendant only accepts a new bond in pairing mode (blue LED); a
+  device still bonded to another phone answers `Pairing Failed reason=8` in the system log. See
+  Limitless' guide to
+  [LED colours](https://help.limitless.ai/en/articles/10542073-what-do-the-different-pendant-led-light-colors-mean)
+  and [factory reset](https://help.limitless.ai/en/articles/10547401-how-do-i-factory-reset-my-pendant)
+  (a reset deletes recordings that were not downloaded yet).
+- `bt connect|disconnect|forget|status` wrap `bluetoothctl` and are no-ops with the Bleak backend.
+- `pendant download` takes `--timeout` (seconds) and `--idle` (stop after N seconds without new
+  pages, Bleak backend only).
+- Tested on macOS with firmware `1.1.20`; the D-Bus backend was refactored but not re-tested.
 
 ## Commands
 

@@ -11,7 +11,14 @@ from pendant.core.bluetooth import (
     forget_device,
     print_bt_status,
 )
+from pendant.core.client import backend_name, create_client
 from pendant.core.config import DEFAULT_PENDANT_ADDRESS, AUDIO_SERVICE_UUID
+
+_NO_BLUEZ = (
+    "Not needed with the Bleak backend (macOS): the connection is opened per command and "
+    "bonding is handled by the OS. Use 'pendant bt pair' once to bond, and remove the "
+    "Pendant from System Settings > Bluetooth if you ever need to forget it."
+)
 
 
 @click.group()
@@ -25,6 +32,19 @@ def bt():
 def pair(ctx):
     """Pair and bond with the pendant (required first time)."""
     address = ctx.obj['address']
+    if backend_name() == "bleak":
+        # The OS pairs when the Pendant rejects an unencrypted write; the Pendant must be
+        # in pairing mode (blue LED). Any command works, status is harmless.
+        client = create_client(address)
+        if not client.connect():
+            raise click.ClickException("Failed to connect to device")
+        try:
+            client.send_command("get_device_status")
+            client.run_for(2)
+        finally:
+            client.disconnect()
+        click.echo("\nPaired and bonded.")
+        return
     if not pair_device(address):
         raise click.ClickException("Pairing failed")
 
@@ -34,6 +54,9 @@ def pair(ctx):
 def connect(ctx):
     """Connect to an already-paired pendant."""
     address = ctx.obj['address']
+    if backend_name() == "bleak":
+        click.echo(_NO_BLUEZ)
+        return
     if not connect_device(address):
         raise click.ClickException("Connection failed")
 
@@ -43,6 +66,9 @@ def connect(ctx):
 def disconnect(ctx):
     """Disconnect from pendant (keeps pairing)."""
     address = ctx.obj['address']
+    if backend_name() == "bleak":
+        click.echo(_NO_BLUEZ)
+        return
     disconnect_device(address)
 
 
@@ -51,6 +77,9 @@ def disconnect(ctx):
 def forget(ctx):
     """Remove pairing completely."""
     address = ctx.obj['address']
+    if backend_name() == "bleak":
+        click.echo(_NO_BLUEZ)
+        return
     forget_device(address)
 
 
@@ -59,6 +88,9 @@ def forget(ctx):
 def status(ctx):
     """Check Bluetooth connection status."""
     address = ctx.obj['address']
+    if backend_name() == "bleak":
+        click.echo(_NO_BLUEZ)
+        return
     print_bt_status(address)
 
 

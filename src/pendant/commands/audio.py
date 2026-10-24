@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from pendant.core.config import MIN_VALID_TIMESTAMP_MS
-from pendant.core.dbus_client import DBusClient
+from pendant.core.client import create_client
 from pendant.core.protocol import load_private_key
 from pendant.core.opus import decode_opus_file
 
@@ -15,15 +15,18 @@ from pendant.core.opus import decode_opus_file
 @click.command()
 @click.option('--decode', '-d', is_flag=True, help='Auto-decode opus to WAV')
 @click.option('--output', '-o', type=click.Path(), default='.', help='Output directory')
+@click.option('--timeout', '-t', default=120, show_default=True,
+              help='Maximum seconds to keep receiving pages')
+@click.option('--idle', default=15, show_default=True,
+              help='Stop after this many seconds without new pages (Bleak backend only)')
 @click.pass_context
-def download(ctx, decode, output):
+def download(ctx, decode, output, timeout, idle):
     """Download stored recordings from the pendant."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
     output_dir = Path(output)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    client = DBusClient(address)
+    client = create_client(address)
 
     # Try to load private key for decryption
     client.private_key = load_private_key()
@@ -36,13 +39,11 @@ def download(ctx, decode, output):
     click.echo("\nSyncing time...")
     client.send_command("set_current_time")
 
-    def start_download():
-        click.echo("\nDownloading audio (this may take a while)...")
-        client.send_command("download_flash_pages", batch=True, realtime=False)
-        return False
+    client.run_for(2)
 
-    GLib.timeout_add_seconds(2, start_download)
-    client.run_with_timeout(120)
+    click.echo("\nDownloading audio (this may take a while)...")
+    client.send_command("download_flash_pages", batch=True, realtime=False)
+    client.run_for(max(timeout - 2, 1), idle_stop=idle)
     client.disconnect()
 
     # Save audio
@@ -143,10 +144,8 @@ def decode(input_file, output_file, verbose):
 @click.pass_context
 def record(ctx):
     """Start recording on the pendant."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -154,8 +153,7 @@ def record(ctx):
     click.echo("\nStarting recording...")
     client.send_command("start_recording")
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("Recording started (if device supports remote start)")
 
@@ -164,10 +162,8 @@ def record(ctx):
 @click.pass_context
 def stop(ctx):
     """Stop recording on the pendant."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -175,8 +171,7 @@ def stop(ctx):
     click.echo("\nStopping recording...")
     client.send_command("stop_recording")
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("Recording stopped")
 
@@ -185,10 +180,8 @@ def stop(ctx):
 @click.pass_context
 def clear(ctx):
     """Clear all recordings from device storage."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -196,7 +189,6 @@ def clear(ctx):
     click.echo("\nClearing device storage...")
     client.send_command("clear_storage")
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("Storage cleared!")

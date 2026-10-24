@@ -2,7 +2,7 @@
 
 import click
 
-from pendant.core.dbus_client import DBusClient
+from pendant.core.client import create_client
 
 
 @click.group()
@@ -23,10 +23,8 @@ def led(ctx, state):
       
     The exact behavior depends on device firmware.
     """
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -34,8 +32,7 @@ def led(ctx, state):
     click.echo(f"\nSetting LED state to {state}...")
     client.send_command("set_led", state=state)
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("LED state set")
 
@@ -45,10 +42,8 @@ def led(ctx, state):
 @click.pass_context
 def brightness(ctx, brightness):
     """Set LED brightness (0-100)."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -56,8 +51,7 @@ def brightness(ctx, brightness):
     click.echo(f"\nSetting LED brightness to {brightness}%...")
     client.send_command("set_led_brightness", brightness=brightness)
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("LED brightness set")
 
@@ -76,10 +70,8 @@ def vad(ctx, threshold):
       0.5 = Default/balanced
       0.7 = Low sensitivity
     """
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -87,8 +79,7 @@ def vad(ctx, threshold):
     click.echo(f"\nSetting VAD threshold to {threshold}...")
     client.send_command("set_vad_threshold", threshold=threshold)
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("VAD threshold set")
 
@@ -98,10 +89,8 @@ def vad(ctx, threshold):
 @click.pass_context
 def name(ctx, name):
     """Set the device name."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -109,8 +98,7 @@ def name(ctx, name):
     click.echo(f"\nSetting device name to '{name}'...")
     client.send_command("set_device_name", name=name)
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("Device name set")
 
@@ -121,10 +109,8 @@ def name(ctx, name):
 @click.pass_context
 def wifi_add(ctx, ssid, password):
     """Add WiFi credentials to the device."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -132,8 +118,7 @@ def wifi_add(ctx, ssid, password):
     click.echo(f"\nAdding WiFi credentials for '{ssid}'...")
     client.send_command("add_wifi_credentials", ssid=ssid, password=password)
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("WiFi credentials added")
 
@@ -143,10 +128,8 @@ def wifi_add(ctx, ssid, password):
 @click.pass_context
 def wifi_connect(ctx, ssid):
     """Connect to a previously configured WiFi network."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -154,8 +137,7 @@ def wifi_connect(ctx, ssid):
     click.echo(f"\nConnecting to WiFi '{ssid}'...")
     client.send_command("connect_to_wifi", ssid=ssid)
 
-    GLib.timeout_add_seconds(5, lambda: client.stop() or False)
-    client.run_with_timeout(10)
+    client.run_for(5)
     client.disconnect()
     click.echo("WiFi connection initiated")
 
@@ -164,10 +146,8 @@ def wifi_connect(ctx, ssid):
 @click.pass_context
 def wifi_disconnect(ctx):
     """Disconnect from WiFi."""
-    from gi.repository import GLib
-
     address = ctx.obj['address']
-    client = DBusClient(address)
+    client = create_client(address)
 
     if not client.connect():
         raise click.ClickException("Failed to connect to device")
@@ -175,7 +155,6 @@ def wifi_disconnect(ctx):
     click.echo("\nDisconnecting from WiFi...")
     client.send_command("disconnect_wifi")
 
-    GLib.timeout_add_seconds(2, lambda: client.stop() or False)
-    client.run_with_timeout(5)
+    client.run_for(2)
     client.disconnect()
     click.echo("WiFi disconnected")

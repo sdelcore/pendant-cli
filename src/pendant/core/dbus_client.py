@@ -4,11 +4,12 @@ import subprocess
 from typing import Optional, Callable
 
 from .config import DEFAULT_PENDANT_ADDRESS, CONTROL_UUID, AUDIO_DATA_UUID
-from .protocol import PendantProtocol, DEBUG_MODE
+from .protocol import PendantProtocol
 from .bluetooth import ensure_connected
+from .response_handler import ResponseHandlerMixin
 
 
-class DBusClient:
+class DBusClient(ResponseHandlerMixin):
     """D-Bus backend for communicating with already-connected pendant."""
 
     def __init__(self, address: str = DEFAULT_PENDANT_ADDRESS):
@@ -67,58 +68,6 @@ class DBusClient:
                 response = self.protocol.parse_response(payload)
                 if response:
                     self._handle_response(response)
-
-    def _handle_response(self, response: dict):
-        """Process parsed response."""
-        rtype = response.get("type")
-        self.responses.append(rtype)
-
-        if rtype == "device_info":
-            if not self._info_printed:
-                print(f"\n  Device: {response.get('device_name', 'Unknown')}")
-                print(f"  Firmware: {response.get('firmware_version', '?')}")
-                print(f"  Hardware: {response.get('hardware_version', '?')}")
-                print(f"  Serial: {response.get('serial_number', '?')}")
-                self._info_printed = True
-
-        elif rtype == "device_status":
-            if not self._status_printed:
-                is_recording = response.get('is_recording', False)
-                print(f"\n  Recording: {is_recording}")
-                print(f"  Storage: {response.get('storage_used_percent', 0)}%")
-                print(f"  (LED is authoritative: solid white = recording)")
-                self._status_printed = True
-
-        elif rtype == "battery_status":
-            print(f"\n  Battery: {response.get('level', 0)}%")
-            if response.get('charging'):
-                print(f"  Charging: yes")
-
-        elif rtype == "set_current_time_response":
-            print(f"\n  Time synced: {response.get('success', False)}")
-
-        elif rtype == "storage_buffer":
-            self.page_count += 1
-            flash_page = response.get("flash_page", b"")
-            if flash_page:
-                if DEBUG_MODE:
-                    print(f"\n  Page {self.page_count}: flash_page={len(flash_page)}B")
-                opus, pcm, encrypted, _, page_info = self.protocol.extract_audio_from_flash_page(flash_page, self.private_key)
-                # Track audio offset for this page
-                page_info["audio_offset_bytes"] = len(self.opus_data)
-                self.page_timestamps.append(page_info)
-                self.opus_data.extend(opus)
-                self.pcm_data.extend(pcm)
-                self.encrypted_data.extend(encrypted)
-            if not DEBUG_MODE:
-                enc_str = f" enc={len(self.encrypted_data)}B" if self.encrypted_data else ""
-                print(f"\r  Page {self.page_count}: opus={len(self.opus_data)}B pcm={len(self.pcm_data)}B{enc_str}", end="", flush=True)
-
-        elif rtype and rtype != "parse_error":
-            print(f"\n  Response: {rtype}")
-
-        if self.on_response:
-            self.on_response(response)
 
     def check_connection(self) -> bool:
         """Check if device is connected."""
@@ -205,6 +154,17 @@ class DBusClient:
 
         GLib.timeout_add_seconds(timeout_seconds, stop)
         self.loop.run()
+
+    def run_for(self, seconds: int, idle_stop: Optional[int] = None):
+        """Receive notifications for up to ``seconds`` (or until stop() is called).
+
+        ``idle_stop`` is accepted for API parity with the Bleak backend and is ignored here.
+        """
+        self.run_with_timeout(seconds)
+
+    def read_battery(self) -> Optional[int]:
+        """Battery percentage from the standard BLE Battery Service."""
+        return get_battery_from_dbus(self.address)
 
     def stop(self):
         """Stop the main loop."""
